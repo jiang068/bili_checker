@@ -1,9 +1,9 @@
 // ==UserScript==
-// @name         B站查成分_改(带悬浮控制窗+扩充)
+// @name         B站查成分_改
 // @namespace    bilibili.auto.labeling2
-// @version      1.6
-// @description  包含可任意拖拽、最小化的控制面板。支持配置持久化、高频限流优化。新增智能可见性监听，挂后台黑听时自动进入零消耗冬眠模式。
-// @author       jiang068
+// @version      1.7
+// @description  带悬浮控制窗+扩充成分字典，可在评论区、直播间弹幕、个人主页使用。支持配置持久化、高频限流优化。新增智能可见性监听，挂后台黑听时自动进入零消耗冬眠模式。
+// @author       jiang068 (@github)
 // @match        https://*.bilibili.com/*
 // @connect      api.bilibili.com
 // @grant        GM_xmlhttpRequest
@@ -119,7 +119,7 @@
     // --- 7. 主机与单机大作 ---
     const zgameList = [
         ["塞尔达", "塞尔达|王国之泪|旷野之息", "#06B6D4"], 
-        ["怪猎", "怪物猎人|怪猎|荒野|崛起|世界", "#CA8A04"], 
+        ["怪猎", "怪物猎人|怪猎|荒野", "#CA8A04"], 
         ["魂系", "黑暗之魂|Elden Ring|只狼|法环|血源|不死人", "#8B0000"], 
         ["GTA", "GTA6|GTA5|侠盗猎车", "#EC4899"], 
         ["马里奥", "超级马里奥|马力欧|任天堂", "#FF0000"],
@@ -476,6 +476,35 @@
 
     // --- 页面环境判断与轮询初始化调度 ---
     const isLivePage = window.location.host.includes("live.bilibili.com");
+    const isSpacePage = window.location.host.includes("space.bilibili.com");
+
+    // 从空间页URL提取UID
+    function getSpaceUid() {
+        const match = window.location.pathname.match(/^\/(\d+)/);
+        return match ? match[1] : null;
+    }
+
+    // --- 个人空间页扫描：在等级标签后注入成分标签 ---
+    function scanSpacePage() {
+        if (document.hidden) return;
+
+        const levelEl = document.querySelector('a.level');
+        if (!levelEl) return;
+
+        const uid = getSpaceUid();
+        if (!uid) return;
+
+        // 创建/复用等级标签后的持久化标签容器
+        let tagWrapper = levelEl.nextElementSibling;
+        if (!tagWrapper || !tagWrapper.classList.contains('my-tag-wrapper')) {
+            tagWrapper = document.createElement('span');
+            tagWrapper.className = 'my-tag-wrapper';
+            tagWrapper.style.cssText = 'display: inline; vertical-align: middle;';
+            levelEl.after(tagWrapper);
+        }
+
+        applyTags(uid, tagWrapper);
+    }
 
     setTimeout(createControlPanel, 1000);
 
@@ -484,6 +513,16 @@
             if (document.querySelector("#chat-items")) {
                 clearInterval(liveTimer);
                 setInterval(scanLiveChat, 300);
+            }
+        }, 500);
+    } else if (isSpacePage) {
+        // 空间页面：等 .level 元素出现后开始轮询
+        const spaceTimer = setInterval(() => {
+            const levelEl = document.querySelector('a.level');
+            if (levelEl) {
+                clearInterval(spaceTimer);
+                scanSpacePage(); // 立执首扫
+                setInterval(scanSpacePage, 2000); // 降低频率，空间页变动少
             }
         }, 500);
     } else {
